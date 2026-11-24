@@ -1,0 +1,5 @@
+# The bot is built using the standard Python library and native Windows ctypes API,
+# meaning it works directly with 0 external dependencies required!
+#
+# Optional packages if you prefer PyAutoGUI extensions:
+# pyautogui>=0.9.54
