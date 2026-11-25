@@ -114,6 +114,13 @@ class TestHumanMouseMath(unittest.TestCase):
         self.assertGreaterEqual(x, 0)
         self.assertGreaterEqual(y, 0)
 
+    def test_editor_center_point(self):
+        x, y = human_mouse.get_editor_center_point()
+        self.assertIsInstance(x, int)
+        self.assertIsInstance(y, int)
+        self.assertGreater(x, 0)
+        self.assertGreater(y, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

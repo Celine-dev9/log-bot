@@ -1,5 +1,5 @@
 """
-Manages VS Code processes: launching a new instance, opening workspaces,
+Manages VS Code processes: launching a new instance for the target folder
 and opening specific code files at line 1.
 """
 
@@ -7,7 +7,6 @@ import os
 import shutil
 import subprocess
 import time
-from typing import Optional
 import human_mouse
 
 
@@ -43,46 +42,37 @@ class VSCodeController:
         self.target_folder = os.path.abspath(target_folder)
         self.folder_name = os.path.basename(self.target_folder)
         self.code_bin = find_vscode_binary()
-        self.hwnd: Optional[int] = None
 
     def launch_new_instance(self) -> None:
         """
         Launches a new, independent VS Code window with the target folder opened.
+        Minimizes the bot terminal and gives the screen to the new VS Code window.
         """
         print(f"\n[VSCode] Launching new VS Code instance for folder:")
         print(f"         {self.target_folder}")
 
-        # 'code -n <folder>' launches in a brand-new window
-        cmd = [self.code_bin, "-n", self.target_folder]
-        subprocess.Popen(cmd, shell=True)
+        # Minimize the bot workspace/terminal window
+        human_mouse.minimize_bot_window()
 
-        # Allow VS Code time to open and render workspace
-        print("[VSCode] Waiting for window to initialize...")
-        for _ in range(10):
-            time.sleep(1.0)
-            self.hwnd = human_mouse.find_vscode_window(keyword=self.folder_name)
-            if self.hwnd:
-                break
+        # 'code -n <folder>' launches the target project in a brand-new window
+        cmd = f'"{self.code_bin}" -n "{self.target_folder}"'
+        try:
+            subprocess.Popen(cmd, shell=True)
+        except Exception:
+            pass
 
-        if not self.hwnd:
-            # Fallback to any VS Code window
-            self.hwnd = human_mouse.find_vscode_window()
-
-        if self.hwnd:
-            human_mouse.focus_window(self.hwnd)
-            print(f"[VSCode] Connected to window (HWND: {self.hwnd}).")
-        else:
-            print("[VSCode] Notice: Window handle could not be hooked directly; will rely on active window.")
+        print("[VSCode] Waiting 4 seconds for window to initialize...")
+        time.sleep(4.0)
 
     def open_file(self, file_path: str) -> None:
         """
-        Opens a specific code file in the current VS Code instance at line 1.
+        Opens a specific code file in the target VS Code instance at line 1.
+        Uses '-r <target_folder>' so it strictly opens in the target window,
+        never in the bot's workspace.
         """
         abs_file = os.path.abspath(file_path)
-        # 'code -r -g file:1' reuses current window and places cursor at line 1
-        cmd = [self.code_bin, "-r", "-g", f"{abs_file}:1"]
-        subprocess.run(cmd, shell=True, check=False)
-
-        # Ensure VS Code window stays in focus
-        if self.hwnd:
-            human_mouse.focus_window(self.hwnd)
+        cmd = f'"{self.code_bin}" -r "{self.target_folder}" -g "{abs_file}:1"'
+        try:
+            subprocess.run(cmd, shell=True, check=False)
+        except Exception:
+            pass

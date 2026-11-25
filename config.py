@@ -9,19 +9,19 @@ from typing import Set
 # Scrolling and Human Movement Parameters
 # ==========================================
 
-# Interval between scroll events in seconds (approx 3 seconds as requested)
-SCROLL_INTERVAL_MIN: float = 2.7
-SCROLL_INTERVAL_MAX: float = 3.3
+# Interval between scroll events in seconds (3 to 4 seconds to mimic human reading speed)
+SCROLL_INTERVAL_MIN: float = 3.0
+SCROLL_INTERVAL_MAX: float = 4.0
 
 # Wheel scroll delta per interval.
 # Negative value scrolls down on Windows (-120 is one standard mouse wheel notch).
-# Using -60 to -120 gives a gentle, realistic scroll down.
-SCROLL_DELTA_MIN: int = -120
-SCROLL_DELTA_MAX: int = -80
+# -100 to -160 gives a natural, steady scroll down of about 4-8 lines.
+SCROLL_DELTA_MIN: int = -160
+SCROLL_DELTA_MAX: int = -100
 
 # Micro-steps per scroll action (subdivides wheel ticks for smoother visual scroll)
-SCROLL_MICRO_STEPS: int = 2
-SCROLL_MICRO_DELAY: float = 0.05
+SCROLL_MICRO_STEPS: int = 3
+SCROLL_MICRO_DELAY: float = 0.04
 
 # Human mouse movement simulation:
 # Chance of a subtle cursor drift between scrolls (reading gaze tracking)
@@ -29,20 +29,20 @@ MOUSE_DRIFT_CHANCE: float = 0.45
 MOUSE_DRIFT_RANGE_X: int = 15   # Max pixels to wander horizontally
 MOUSE_DRIFT_RANGE_Y: int = 12   # Max pixels to wander vertically
 
-# Time to wait after opening a new file before beginning scroll (in seconds)
+# Time to wait after opening a new file at line 1 before beginning scroll (in seconds)
 FILE_LOAD_WAIT: float = 2.0
 
-# Reading pacing: estimated lines scrolled per 3-second cycle
-LINES_PER_SCROLL: int = 10
+# Reading pacing: estimated lines scrolled per 3 to 4-second cycle
+LINES_PER_SCROLL: int = 8
 
-# Maximum seconds to spend on any single file (prevents infinite scrolling on 5,000+ line files)
-MAX_SECONDS_PER_FILE: float = 45.0
+# Maximum seconds to spend on any single file (generous ceiling allowing full top-to-bottom reading)
+MAX_SECONDS_PER_FILE: float = 600.0
 
 # Minimum seconds to spend reading any code file
 MIN_SECONDS_PER_FILE: float = 6.0
 
 # Pause between finishing one file and opening the next file
-PAUSE_BETWEEN_FILES: float = 1.8
+PAUSE_BETWEEN_FILES: float = 2.0
 
 
 # ==========================================
