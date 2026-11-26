@@ -12,6 +12,7 @@ import config
 import file_scanner
 import human_mouse
 import vscode_manager
+import scraper
 
 
 class TestCodeScanner(unittest.TestCase):
@@ -120,6 +121,29 @@ class TestHumanMouseMath(unittest.TestCase):
         self.assertIsInstance(y, int)
         self.assertGreater(x, 0)
         self.assertGreater(y, 0)
+
+
+class TestScraperUtilities(unittest.TestCase):
+    def test_slugify_url(self):
+        slug = scraper.slugify_url("https://www.track-trace.com/aircargo")
+        self.assertEqual(slug, "track-trace_com_aircargo")
+
+    def test_extract_internal_links(self):
+        sample_html = """
+        <html>
+            <body>
+                <a href="/about">About Us</a>
+                <a href="/contact">Contact</a>
+                <a href="https://other.com/page">External</a>
+                <a href="#section">Fragment</a>
+            </body>
+        </html>
+        """
+        links = scraper.extract_internal_links("https://example.com", sample_html, max_pages=5)
+        self.assertEqual(len(links), 2)
+        names = [item["name"] for item in links]
+        self.assertIn("about.html", names)
+        self.assertIn("contact.html", names)
 
 
 if __name__ == "__main__":

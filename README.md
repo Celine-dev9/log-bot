@@ -1,60 +1,54 @@
-# Human Code Reader Bot for VS Code & Antigravity
+# Human Code Reader & Website Scraper Bot
 
-A realistic Python bot that opens a new instance of Visual Studio Code with a target folder of your choice, scans all code files (recursively through folders), and gently scrolls through each file mimicking human reading behavior.
-
----
-
-## ✨ Features
-
-- **Opens a Fresh VS Code Instance**: Launches a separate, clean VS Code window (`code -n <folder>`) specifically for the folder you select.
-- **Strict Code File Filtering**:
-  - **Included**: Python (`.py`), JavaScript/TypeScript (`.js`, `.ts`, `.tsx`, `.jsx`), Web (`.html`, `.css`, `.scss`, `.vue`), Systems (`.c`, `.cpp`, `.cs`, `.go`, `.rs`, `.java`), Config & Data (`.json`, `.yaml`, `.toml`, `.sql`, `Dockerfile`, `.md`), and more.
-  - **Strictly Ignored**: Images (`.png`, `.jpg`, `.svg`, `.ico`), Audio/Video (`.mp3`, `.mp4`), Binaries/Executables (`.exe`, `.dll`, `.zip`, `.pdf`), Lockfiles (`package-lock.json`), and dependency directories (`node_modules`, `.git`, `venv`, `dist`, `__pycache__`).
-- **Human Reading Simulation**:
-  - **Mouse Effect Felt**: Moves the cursor into the editor pane using smooth cubic Bézier curves with natural acceleration/deceleration and subtle reading gaze drift.
-  - **Slight Scroll Down Every ~3 Seconds**: Gentle, micro-stepped wheel events every 2.7 to 3.3 seconds.
-  - **Zero Edits / Changes**: Does not press keys or send keystrokes; your source files remain 100% untouched.
-  - **Paced by File Length**: Automatically calculates reading duration based on file line count, with a safe ceiling for very large files.
-- **Zero External Dependencies**: Powered by Python's built-in standard library and native Windows `ctypes` (`user32.dll`). No `pip install` required.
+An automated Python bot that merges website mirroring and human-like code reading:
+1. **Scrapes Target Websites**: Opens a visible Chrome browser window, navigates through the target URL, performs realistic human scrolls (down, left/right, and up), and discovers internal subpages to generate a multi-page project.
+2. **Code Only (Zero Media Assets)**: Strictly captures only `.html`, `.css`, and `.js` code files. Images, videos, audio, and font files are completely excluded.
+3. **Dedicated Output Location**: Projects are written to individual folders inside `Desktop\scraped_projects` (completely separate from the bot workspace).
+4. **Human Reading in VS Code**: Opens the scraped project in a fresh VS Code instance and scrolls through the code files from top to bottom every 3 to 4 seconds with realistic mouse gaze drift.
+5. **Continuous Loop**: Once all URLs have been scraped and read, the bot continues reading across all created projects in a continuous loop without opening browsers or re-scraping.
+6. **Zero Screen Distraction**: The bot workspace/terminal window stays minimized in the background at all times.
 
 ---
 
 ## 🚀 How to Run
 
-### Option 1: In VS Code or Antigravity IDE
-1. Open this folder (`log-mot`) in VS Code or Antigravity IDE.
-2. Open `bot.py`.
-3. Press **`F5`** (or click the **Play / Run Python File** button in the top-right corner).
-4. Enter or paste the path of the folder you want to read (or use the graphical folder picker popup).
+### 1. Configure Target URLs
+In [`config.py`](file:///c:/Users/user/Desktop/peeples%20sites/log-mot/config.py), add as many website URLs as you want:
 
-### Option 2: From the Terminal
+```python
+TARGET_URLS = [
+    "https://www.track-trace.com/aircargo",
+    "https://example.com",
+]
+```
+
+### 2. Run the Bot
 In PowerShell or Command Prompt:
 
 ```powershell
-# Interactive mode (prompts you for the path or opens folder picker)
 python bot.py
+```
 
-# Direct path mode (specify the folder path directly)
-python bot.py "C:\Users\USER\Desktop\my-project"
+You can also pass URLs directly on the command line:
+
+```powershell
+python bot.py "https://www.track-trace.com/aircargo" "https://example.com"
 ```
 
 ---
 
 ## ⚙️ Configuration (`config.py`)
 
-You can tweak any behavioral setting in [`config.py`](file:///c:/Users/USER/Desktop/peeples%20sites/log-mot/config.py):
-
 | Setting | Default | Description |
 | :--- | :--- | :--- |
-| `SCROLL_INTERVAL_MIN` / `MAX` | `2.7` – `3.3`s | Time between scroll actions (~3 seconds) |
-| `SCROLL_DELTA_MIN` / `MAX` | `-120` – `-80` | Mouse wheel scroll notch intensity |
-| `SCROLL_MICRO_STEPS` | `2` | Subdivides wheel clicks for silky-smooth motion |
-| `MOUSE_DRIFT_CHANCE` | `0.45` | Probability of subtle cursor adjustment while reading |
-| `FILE_LOAD_WAIT` | `2.0`s | Pause after opening a file before scrolling starts |
-| `MAX_SECONDS_PER_FILE` | `45.0`s | Max time to spend on huge files |
-| `PAUSE_BETWEEN_FILES` | `1.8`s | Natural breathing pause between files |
+| `TARGET_URLS` | `[...]` | List of website URLs to scrape & read |
+| `OUTPUT_ROOT` | `Desktop/scraped_projects` | Master folder where independent project folders are created |
+| `MAX_PAGES_PER_SITE` | `6` | Maximum internal subpages to discover per website |
+| `SCROLL_INTERVAL_MIN` / `MAX` | `3.0` – `4.0`s | Mouse scroll interval mimicking human reading speed |
+| `SCROLL_DELTA_MIN` / `MAX` | `-160` – `-100` | Wheel scroll notch intensity (4 to 8 lines) |
+| `LINES_PER_SCROLL` | `8` | Lines scrolled per cycle |
 
 ---
 
 ## 🛑 Stopping the Bot
-Press **`Ctrl + C`** in the terminal running `bot.py` at any time to cleanly stop the reader.
+Press **`Ctrl + C`** in the terminal running `bot.py` at any time to cleanly stop the bot.

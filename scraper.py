@@ -1,180 +1,290 @@
-import asyncio
+"""
+Website Scraper Module for Human Code Reader Bot
+=================================================
+Scrapes full multi-page websites using Playwright (visible Chrome browser).
+  - Prominently displays the Chrome browser window on screen
+  - Performs realistic human scrolling (down, left/right, and back up)
+  - Discovers internal pages across the website to build a multi-page project
+  - STRICTLY captures code only: HTML, CSS, and JavaScript
+  - Completely rejects media assets (images, videos, audio, fonts)
+  - Saves each project in an independent folder outside the bot directory
+"""
+
 import os
 import re
 import time
+import asyncio
 from pathlib import Path
-from urllib.parse import urljoin, urlparse
+from typing import Optional, List, Dict
+from urllib.parse import urlparse, urljoin
+
+from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
-from bs4 import BeautifulSoup
 
-# 1. CONFIGURATION: Define targeted routes and local workspace
-BASE_URL = ''
-PAGES_TO_MIRROR = [
-    {'name': 'index.html', 'url': 'https://www.track-trace.com/aircargo'},
+import config
 
 
-]
+def slugify_url(url: str) -> str:
+    """Generates a clean directory name from a URL."""
+    parsed = urlparse(url)
+    host = parsed.netloc.replace("www.", "")
+    path = parsed.path.strip("/").replace("/", "_")
+    name = f"{host}_{path}" if path else host
+    name = re.sub(r"[^a-zA-Z0-9_\-]", "_", name).strip("_")
+    return name or "web_project"
 
-# Path setup relative to the script location
-SITE_DIR = Path(__file__).parent / 'mirrors' / 'cargo-track-2'
-ASSETS_DIR = SITE_DIR / 'assets'
 
-# Safely construct output folder architecture
-ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+def extract_internal_links(base_url: str, html: str, max_pages: int) -> List[Dict[str, str]]:
+    """Extracts unique internal links from the same domain."""
+    soup = BeautifulSoup(html, "html.parser")
+    base_parsed = urlparse(base_url)
+    base_domain = base_parsed.netloc.lower()
 
-url_to_local_map = {}
-captured_html_pages = []
+    discovered = []
+    seen = {base_url.rstrip("/")}
 
-async def handle_response(response):
-    """Background network interceptor to harvest assets (images, css, js, fonts)."""
-    url = response.url
-    headers = response.headers
-    content_type = headers.get('content-type', '').lower()
-    resource_type = response.request.resource_type
+    for a in soup.find_all("a", href=True):
+        raw_href = a["href"].strip()
+        if not raw_href or raw_href.startswith(("mailto:", "tel:", "javascript:", "#")):
+            continue
 
-    if any(t in content_type for t in ['image', 'css', 'font', 'javascript']) or \
-       resource_type in ['script', 'stylesheet']:
+        full_url = urljoin(base_url, raw_href)
+        parsed = urlparse(full_url)
+
+        if parsed.scheme in ("http", "https") and parsed.netloc.lower() == base_domain:
+            clean_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+            if clean_url not in seen and len(clean_url) > len(parsed.scheme) + 3:
+                seen.add(clean_url)
+
+                # Generate clean filename (e.g., about.html, contact.html)
+                clean_path = parsed.path.strip("/").replace("/", "_")
+                filename = f"{clean_path}.html" if clean_path else f"page_{len(discovered) + 1}.html"
+                filename = re.sub(r"[^a-zA-Z0-9.\-_]", "_", filename)
+                if not filename.endswith(".html"):
+                    filename += ".html"
+
+                discovered.append({"name": filename, "url": full_url})
+                if len(discovered) >= max_pages - 1:
+                    break
+
+    return discovered
+
+
+async def _scrape_website_async(
+    target_url: str,
+    output_root: Optional[str] = None,
+    max_pages: Optional[int] = None,
+) -> Optional[str]:
+    """Asynchronous core scraper using Playwright."""
+    output_root = output_root or config.OUTPUT_ROOT
+    max_pages = max_pages or getattr(config, "MAX_PAGES_PER_SITE", 6)
+
+    project_slug = slugify_url(target_url)
+    project_dir = Path(output_root) / project_slug
+    assets_dir = project_dir / "assets"
+
+    assets_dir.mkdir(parents=True, exist_ok=True)
+
+    url_to_local_map = {}
+    captured_pages = []
+
+    print(f"\n" + "=" * 65)
+    print(f"🌐 [SCRAPER] Launching Chrome Browser for: {target_url}")
+    print(f"📁 Destination Folder: {project_dir}")
+    print("=" * 65)
+
+    async def handle_response(response):
+        """Intercepts and saves ONLY CSS and JavaScript files. Zero image/asset downloads."""
         try:
-            # Generate a sanitized filename
-            parsed_url = urlparse(url)
-            filename = os.path.basename(parsed_url.path).split('?')[0]
-            
-            if not filename or '.' not in filename:
-                ext = 'js' if 'javascript' in content_type else \
-                      'css' if 'css' in content_type else \
-                      'png' if 'image' in content_type else 'woff2'
-                filename = f"asset_{int(time.time() * 1000)}_{os.urandom(2).hex()}.{ext}"
+            url = response.url
+            content_type = response.headers.get("content-type", "").lower()
+            resource_type = response.request.resource_type
 
-            filename = re.sub(r'[^a-zA-Z0-9.\-_]', '_', filename)
-            local_file_path = ASSETS_DIR / filename
+            # Strictly CSS and JS only
+            is_css = ("text/css" in content_type) or (resource_type == "stylesheet") or urlparse(url).path.endswith(".css")
+            is_js = ("javascript" in content_type) or (resource_type == "script") or urlparse(url).path.endswith(".js")
 
-            # Download asset if successful
-            if 200 <= response.status < 300:
-                body = await response.body()
-                with open(local_file_path, 'wb') as f:
-                    f.write(body)
-                url_to_local_map[url] = f"./assets/{filename}"
+            # Exclude images, fonts, media, svgs, etc.
+            is_asset = any(t in content_type for t in ["image", "font", "audio", "video", "media"])
+
+            if (is_css or is_js) and not is_asset:
+                parsed_url = urlparse(url)
+                base_name = os.path.basename(parsed_url.path).split("?")[0]
+
+                if not base_name or "." not in base_name:
+                    ext = "css" if is_css else "js"
+                    base_name = f"script_{int(time.time() * 1000)}_{os.urandom(2).hex()}.{ext}"
+
+                safe_name = re.sub(r"[^a-zA-Z0-9.\-_]", "_", base_name)
+                local_path = assets_dir / safe_name
+
+                if 200 <= response.status < 300:
+                    body = await response.body()
+                    with open(local_path, "wb") as f:
+                        f.write(body)
+                    url_to_local_map[url] = f"./assets/{safe_name}"
         except Exception:
             pass
 
-async def run_mirror():
-    print("🚀 Launching Playwright (Python) mirror engine...")
-    
-    async with async_playwright() as p:
-        # Launching Chromium with common anti-detection flags
-        browser = await p.chromium.launch(headless=False, args=[
-            '--no-sandbox', 
-            '--disable-setuid-sandbox',
-            '--window-size=1920,1080'
-        ])
-        
-        context = await browser.new_context(
-            viewport={'width': 1920, 'height': 1080},
-            user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
-        )
-        
-        page = await context.new_page()
-        
-        # Apply stealth to bypass bot detection
-        stealth = Stealth()
-        await stealth.apply_stealth_async(page)
-        
-        # Hook the response event
-        page.on('response', handle_response)
+    try:
+        async with async_playwright() as p:
+            # Launch visible Chrome window maximized
+            browser = await p.chromium.launch(
+                headless=False,
+                args=[
+                    "--start-maximized",
+                    "--no-sandbox",
+                    "--disable-setuid-sandbox",
+                    "--disable-infobars",
+                ],
+            )
 
-        for page_target in PAGES_TO_MIRROR:
-            target_url = page_target['url'].strip()
-            print(f"\n🌐 [Processing]: {target_url}")
-            
-            try:
-                # 1. Navigation. 'load' is often safer for sites with continuous data streams
-                await page.goto(target_url, wait_until='load', timeout=120000)
-                
-                # 2. Wait for main content
-                await page.wait_for_selector('body', state='visible', timeout=30000)
+            context = await browser.new_context(
+                viewport=None,  # Inherit maximized screen dimensions
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+            )
 
-                # 3. dynamic animation buffer
-                await asyncio.sleep(5)
+            page = await context.new_page()
 
-                # 4. Trigger Lazy Loading via smooth scroll
-                print('↕️ Scrolling to trigger lazy-loaded content...')
-                await page.evaluate("""
-                    async () => {
-                        await new Promise((resolve) => {
-                            let totalHeight = 0;
-                            let distance = 100;
-                            let timer = setInterval(() => {
-                                let scrollHeight = document.body.scrollHeight;
-                                window.scrollBy(0, distance);
-                                totalHeight += distance;
-                                if (totalHeight >= scrollHeight) {
-                                    clearInterval(timer);
-                                    window.scrollTo(0, 0); 
-                                    resolve();
-                                }
-                            }, 100);
-                        });
-                    }
-                """)
+            # Apply stealth to mimic real human browsing
+            stealth = Stealth()
+            await stealth.apply_stealth_async(page)
 
-                # 5. Freeze SVGs for static rendering
-                await page.evaluate("""
-                    () => {
-                        document.querySelectorAll('svg').forEach(svg => {
-                            svg.setAttribute('aria-hidden', 'false');
-                            svg.style.display = 'inline-block';
-                            const style = window.getComputedStyle(svg);
-                            svg.style.color = style.color;
-                            svg.style.fill = style.fill || 'currentColor';
-                        });
-                    }
-                """)
+            page.on("response", handle_response)
 
-                # Save HTML and Meta
-                raw_html = await page.content()
-                captured_html_pages.append({'name': page_target['name'], 'html': raw_html})
-                print(f"📥 Captured: {page_target['name']}")
+            pages_queue = [{"name": "index.html", "url": target_url}]
 
-            except Exception as e:
-                print(f"❌ Error on {target_url}: {e}")
+            page_idx = 0
+            while page_idx < len(pages_queue):
+                current = pages_queue[page_idx]
+                page_idx += 1
+                curr_url = current["url"]
 
-        await browser.close()
-        
-    print('\n🛑 Rewriting internal links and asset paths...')
+                print(f"\n[Browser {page_idx}/{len(pages_queue)}] Navigating to: {curr_url}")
 
-    # Post-processing captured HTML using BeautifulSoup
-    for page_data in captured_html_pages:
-        soup = BeautifulSoup(page_data['html'], 'html.parser')
-
-        # Map assets (CSS, JS, Images)
-        for tag in soup.find_all(['img', 'link', 'script']):
-            attr = 'href' if tag.name == 'link' else 'src'
-            remote_url = tag.get(attr)
-            if remote_url:
                 try:
-                    abs_url = urljoin(BASE_URL, remote_url)
-                    if abs_url in url_to_local_map:
-                        tag[attr] = url_to_local_map[abs_url]
-                except Exception:
-                    pass
+                    # Navigate and wait for content
+                    await page.goto(curr_url, wait_until="domcontentloaded", timeout=45000)
+                    try:
+                        await page.wait_for_selector("body", state="visible", timeout=15000)
+                    except Exception:
+                        pass
 
-        # Map internal links for offline navigation
-        for a in soup.find_all('a', href=True):
+                    await asyncio.sleep(2.0)
+
+                    # Realistic Human Scrolling: Down, Left/Right, and Up
+                    print("  ↳ Scrolling down, left & right, then up...")
+                    await page.evaluate("""
+                        async () => {
+                            // 1. Smooth scroll down to bottom
+                            await new Promise((resolve) => {
+                                let total = 0;
+                                let step = 250;
+                                let timer = setInterval(() => {
+                                    window.scrollBy(0, step);
+                                    total += step;
+                                    if (total >= document.body.scrollHeight || (window.innerHeight + window.scrollY) >= document.body.scrollHeight) {
+                                        clearInterval(timer);
+                                        resolve();
+                                    }
+                                }, 80);
+                            });
+
+                            // 2. Horizontal scroll wiggle (left and right)
+                            window.scrollBy(150, 0);
+                            await new Promise(r => setTimeout(r, 120));
+                            window.scrollBy(-150, 0);
+                            await new Promise(r => setTimeout(r, 120));
+
+                            // 3. Smooth scroll back up to the top
+                            await new Promise((resolve) => {
+                                let timer = setInterval(() => {
+                                    window.scrollBy(0, -350);
+                                    if (window.scrollY <= 0) {
+                                        clearInterval(timer);
+                                        window.scrollTo(0, 0);
+                                        resolve();
+                                    }
+                                }, 60);
+                            });
+                        }
+                    """)
+
+                    await asyncio.sleep(1.5)
+
+                    raw_html = await page.content()
+                    captured_pages.append({"name": current["name"], "url": curr_url, "html": raw_html})
+                    print(f"  ↳ Captured: {current['name']}")
+
+                    # If this is the main page, discover internal subpages
+                    if page_idx == 1 and len(pages_queue) < max_pages:
+                        subpages = extract_internal_links(target_url, raw_html, max_pages)
+                        if subpages:
+                            print(f"  ↳ Discovered {len(subpages)} internal subpages to mirror.")
+                            pages_queue.extend(subpages)
+
+                except Exception as page_err:
+                    print(f"  ↳ [Notice] Skipped page due to error: {page_err}")
+
+            await browser.close()
+
+    except Exception as browser_err:
+        print(f"[Scraper Error] Browser session encountered an issue: {browser_err}")
+
+    if not captured_pages:
+        print("[Scraper] No pages were successfully captured.")
+        return None
+
+    # Post-process captured HTML: rewrite CSS and JS paths, and internal navigation links
+    print("\n[Scraper] Writing clean HTML, CSS, and JS files into project folder...")
+    for p_data in captured_pages:
+        soup = BeautifulSoup(p_data["html"], "html.parser")
+
+        # Map external CSS & JS to local saved files
+        for tag in soup.find_all(["link", "script"]):
+            attr = "href" if tag.name == "link" else "src"
+            remote = tag.get(attr)
+            if remote:
+                abs_url = urljoin(p_data["url"], remote)
+                if abs_url in url_to_local_map:
+                    tag[attr] = url_to_local_map[abs_url]
+
+        # Map internal links so pages navigate locally
+        for a in soup.find_all("a", href=True):
             try:
-                abs_href = urljoin(BASE_URL, a['href'])
-                match = next((p for p in PAGES_TO_MIRROR if p['url'].rstrip('/') == abs_href.rstrip('/')), None)
+                abs_href = urljoin(p_data["url"], a["href"])
+                match = next((p for p in captured_pages if p["url"].rstrip("/") == abs_href.rstrip("/")), None)
                 if match:
-                    a['href'] = f"./{match['name']}"
+                    a["href"] = f"./{match['name']}"
             except Exception:
                 pass
 
-        output_path = SITE_DIR / page_data['name']
-        with open(output_path, 'w', encoding='utf-8') as f:
+        out_file = project_dir / p_data["name"]
+        with open(out_file, "w", encoding="utf-8") as f:
             f.write(str(soup))
 
-    print(f"\n🎉 Process Complete!")
-    print(f"📁 Mirror Location: {SITE_DIR}")
+    print(f"🎉 Scraping complete! Project saved at: {project_dir}")
+    return str(project_dir)
+
+
+def scrape_website(
+    target_url: str,
+    output_root: Optional[str] = None,
+    max_pages: Optional[int] = None,
+) -> Optional[str]:
+    """
+    Synchronous wrapper to scrape a website.
+    Returns the path to the newly created project folder, or None on failure.
+    """
+    try:
+        return asyncio.run(_scrape_website_async(target_url, output_root, max_pages))
+    except Exception as e:
+        print(f"[Scraper Error] {e}")
+        return None
+
 
 if __name__ == "__main__":
-    asyncio.run(run_mirror())
+    test_url = "https://www.track-trace.com/aircargo"
+    result = scrape_website(test_url)
+    print(f"Resulting folder: {result}")

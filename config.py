@@ -1,9 +1,34 @@
 """
-Configuration settings for the Human Code Reader Bot.
-Customize timings, ignored paths, code extensions, and scroll behavior here.
+Configuration settings for the Human Code Reader & Website Scraper Bot.
+Customize target URLs, directories, timings, and scroll behavior here.
 """
 
-from typing import Set
+import os
+from typing import Set, List
+
+# ==========================================
+# Website Scraping Configuration
+# ==========================================
+
+# Enter as many website URLs as you want scraped and read:
+# The bot will scrape each URL in a visible Chrome browser, create a multi-page project,
+# and then open VS Code to read through the generated HTML, CSS, and JS code.
+TARGET_URLS: List[str] = [
+    "https://www.alibaba.com/",
+]
+
+# Dedicated master directory where each scraped project folder is created.
+# Located safely on your Desktop outside the bot workspace (does NOT share root with bot).
+OUTPUT_ROOT: str = os.path.abspath(
+    os.path.join(os.path.expanduser("~"), "Desktop", "scraped_projects")
+)
+
+# Maximum number of internal subpages to discover and scrape per website
+MAX_PAGES_PER_SITE: int = 6
+
+# Page navigation timeout (in seconds)
+PAGE_TIMEOUT_SECONDS: int = 45
+
 
 # ==========================================
 # Scrolling and Human Movement Parameters
