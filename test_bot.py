@@ -1,6 +1,6 @@
 """
 Unit tests and verification for the Human Code Reader Bot components.
-Tests file scanning, asset filtering, VS Code binary discovery, and mouse math.
+Tests file scanning, asset filtering, VS Code binary discovery, mouse math, and pause controller.
 """
 
 import os
@@ -13,6 +13,7 @@ import file_scanner
 import human_mouse
 import vscode_manager
 import scraper
+import bot
 
 
 class TestCodeScanner(unittest.TestCase):
@@ -122,6 +123,13 @@ class TestHumanMouseMath(unittest.TestCase):
         self.assertGreater(x, 0)
         self.assertGreater(y, 0)
 
+    def test_random_editor_point(self):
+        x, y = human_mouse.get_random_editor_point()
+        self.assertIsInstance(x, int)
+        self.assertIsInstance(y, int)
+        self.assertGreater(x, 0)
+        self.assertGreater(y, 0)
+
 
 class TestScraperUtilities(unittest.TestCase):
     def test_slugify_url(self):
@@ -144,6 +152,16 @@ class TestScraperUtilities(unittest.TestCase):
         names = [item["name"] for item in links]
         self.assertIn("about.html", names)
         self.assertIn("contact.html", names)
+
+
+class TestPauseController(unittest.TestCase):
+    def test_pause_controller_initial_state(self):
+        controller = human_mouse.PauseController()
+        self.assertFalse(controller.is_paused)
+
+    def test_global_pause_controller_exists(self):
+        self.assertIsNotNone(human_mouse.pause_controller)
+        self.assertFalse(human_mouse.pause_controller.is_paused)
 
 
 if __name__ == "__main__":

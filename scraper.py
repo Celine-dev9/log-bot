@@ -13,6 +13,7 @@ Scrapes full multi-page websites using Playwright (visible Chrome browser).
 import os
 import re
 import time
+import random
 import asyncio
 from pathlib import Path
 from typing import Optional, List, Dict
@@ -171,47 +172,51 @@ async def _scrape_website_async(
                     except Exception:
                         pass
 
-                    await asyncio.sleep(2.0)
+                    # Prompt visual mouse movement without long delay (every 4 to 5s pace)
+                    await asyncio.sleep(1.0)
+                    await page.mouse.move(random.randint(300, 750), random.randint(250, 550))
 
-                    # Realistic Human Scrolling: Down, Left/Right, and Up
-                    print("  ↳ Scrolling down, left & right, then up...")
+                    print("  ↳ Scrolling and moving mouse (every 4 to 5s pace)...")
+                    # 1. Smooth scroll down to bottom
                     await page.evaluate("""
                         async () => {
-                            // 1. Smooth scroll down to bottom
-                            await new Promise((resolve) => {
-                                let total = 0;
-                                let step = 250;
-                                let timer = setInterval(() => {
-                                    window.scrollBy(0, step);
-                                    total += step;
-                                    if (total >= document.body.scrollHeight || (window.innerHeight + window.scrollY) >= document.body.scrollHeight) {
-                                        clearInterval(timer);
-                                        resolve();
-                                    }
-                                }, 80);
-                            });
-
-                            // 2. Horizontal scroll wiggle (left and right)
-                            window.scrollBy(150, 0);
-                            await new Promise(r => setTimeout(r, 120));
-                            window.scrollBy(-150, 0);
-                            await new Promise(r => setTimeout(r, 120));
-
-                            // 3. Smooth scroll back up to the top
-                            await new Promise((resolve) => {
-                                let timer = setInterval(() => {
-                                    window.scrollBy(0, -350);
-                                    if (window.scrollY <= 0) {
-                                        clearInterval(timer);
-                                        window.scrollTo(0, 0);
-                                        resolve();
-                                    }
-                                }, 60);
-                            });
+                            let total = 0;
+                            let step = 280;
+                            while (total < document.body.scrollHeight && (window.innerHeight + window.scrollY) < document.body.scrollHeight) {
+                                window.scrollBy(0, step);
+                                total += step;
+                                await new Promise(r => setTimeout(r, 80));
+                            }
                         }
                     """)
 
-                    await asyncio.sleep(1.5)
+                    # Active mouse movement every 4 to 5 seconds
+                    await page.mouse.move(random.randint(250, 850), random.randint(200, 600))
+                    await asyncio.sleep(random.uniform(4.0, 5.0))
+
+                    # 2. Horizontal scroll wiggle (left and right)
+                    await page.evaluate("""
+                        () => {
+                            window.scrollBy(160, 0);
+                            setTimeout(() => window.scrollBy(-160, 0), 150);
+                        }
+                    """)
+
+                    await page.mouse.move(random.randint(250, 850), random.randint(200, 600))
+                    await asyncio.sleep(random.uniform(4.0, 5.0))
+
+                    # 3. Smooth scroll back up to the top
+                    await page.evaluate("""
+                        async () => {
+                            while (window.scrollY > 0) {
+                                window.scrollBy(0, -350);
+                                await new Promise(r => setTimeout(r, 60));
+                            }
+                            window.scrollTo(0, 0);
+                        }
+                    """)
+
+                    await asyncio.sleep(1.0)
 
                     raw_html = await page.content()
                     captured_pages.append({"name": current["name"], "url": curr_url, "html": raw_html})

@@ -111,17 +111,35 @@ def smooth_scroll_down(
         time.sleep(micro_delay)
 
 
-def get_editor_center_point() -> Tuple[int, int]:
-    """
-    Returns (x, y) comfortably located in the center of the code editor area.
-    In VS Code, the editor pane is centered slightly to the right of the sidebar.
-    """
-    screen_w = user32.GetSystemMetrics(0)  # Primary screen width
-    screen_h = user32.GetSystemMetrics(1)  # Primary screen height
+def smooth_scroll_up(
+    delta: int = 120,
+    micro_steps: int = 3,
+    micro_delay: float = 0.04,
+) -> None:
+    """Performs a gentle, smooth scroll upward subdivided into micro-ticks."""
+    sub_delta = int(abs(delta) / max(micro_steps, 1))
+    for _ in range(micro_steps):
+        mouse_wheel(sub_delta)
+        time.sleep(micro_delay)
 
-    center_x = int(screen_w * 0.55) + random.randint(-40, 40)
-    center_y = int(screen_h * 0.50) + random.randint(-30, 30)
-    return center_x, center_y
+
+def get_random_editor_point() -> Tuple[int, int]:
+    """
+    Returns (x, y) distributed across the active code editor area.
+    Moves naturally across code lines (~30% to 80% screen width) and vertical content (~22% to 78% screen height),
+    ensuring the mouse does not remain locked only in the middle of the screen.
+    """
+    screen_w = user32.GetSystemMetrics(0)
+    screen_h = user32.GetSystemMetrics(1)
+
+    x = random.randint(int(screen_w * 0.32), int(screen_w * 0.80))
+    y = random.randint(int(screen_h * 0.22), int(screen_h * 0.78))
+    return x, y
+
+
+def get_editor_center_point() -> Tuple[int, int]:
+    """Returns an editor point across the reading area (kept for backward compatibility)."""
+    return get_random_editor_point()
 
 
 def minimize_bot_window() -> None:
@@ -136,3 +154,83 @@ def minimize_bot_window() -> None:
             user32.ShowWindow(fore_hwnd, SW_MINIMIZE)
     except Exception:
         pass
+
+
+# ==========================================
+# Pause / Resume Keyboard Control
+# ==========================================
+
+VK_PAUSE = 0x13
+VK_F8 = 0x77
+VK_CONTROL = 0x11
+VK_MENU = 0x12  # Alt key
+VK_P = 0x50
+
+
+def is_pause_hotkey_pressed() -> bool:
+    """Checks if F8, Pause key, or Ctrl+Alt+P is currently held down."""
+    try:
+        # F8 or Pause/Break key
+        if (user32.GetAsyncKeyState(VK_F8) & 0x8000) or (user32.GetAsyncKeyState(VK_PAUSE) & 0x8000):
+            return True
+        # Ctrl + Alt + P
+        if (
+            (user32.GetAsyncKeyState(VK_CONTROL) & 0x8000)
+            and (user32.GetAsyncKeyState(VK_MENU) & 0x8000)
+            and (user32.GetAsyncKeyState(VK_P) & 0x8000)
+        ):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+class PauseController:
+    """
+    Manages keyboard pause/resume state.
+    Allows toggling pause with F8 (or Ctrl+Alt+P / Pause key) during code reading.
+    """
+
+    def __init__(self):
+        self.is_paused = False
+        self._last_toggle_time = 0.0
+
+    def check_toggle(self) -> bool:
+        """Polls for pause hotkey. If pressed and debounced, toggles state."""
+        now = time.time()
+        # 0.4s debounce prevents rapid toggling
+        if now - self._last_toggle_time < 0.4:
+            return self.is_paused
+
+        if is_pause_hotkey_pressed():
+            self._last_toggle_time = now
+            self.is_paused = not self.is_paused
+            if self.is_paused:
+                print("\n" + "⏸️  " * 15)
+                print("  [PAUSED] Bot paused! Press F8 (or Ctrl+Alt+P) to resume.")
+                print("⏸️  " * 15 + "\n")
+            else:
+                print("\n" + "▶️  " * 15)
+                print("  [RESUMED] Resuming code reading right where it left off...")
+                print("▶️  " * 15 + "\n")
+
+        return self.is_paused
+
+    def sleep_with_pause_check(self, duration: float) -> None:
+        """
+        Sleeps for `duration` seconds while checking for pause toggles every 0.05s.
+        If paused, halts in a lightweight loop until unpaused or killed with Ctrl+C.
+        """
+        elapsed = 0.0
+        step = 0.05
+        while elapsed < duration:
+            self.check_toggle()
+            while self.is_paused:
+                time.sleep(step)
+                self.check_toggle()
+            time.sleep(step)
+            elapsed += step
+
+
+# Global pause controller instance
+pause_controller = PauseController()

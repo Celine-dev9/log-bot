@@ -14,7 +14,8 @@ from typing import Set, List
 # The bot will scrape each URL in a visible Chrome browser, create a multi-page project,
 # and then open VS Code to read through the generated HTML, CSS, and JS code.
 TARGET_URLS: List[str] = [
-    "https://www.alibaba.com/",
+    "https://mku.ac.ke/",
+    "https://www.aisfg.com/",
 ]
 
 # Dedicated master directory where each scraped project folder is created.
@@ -29,20 +30,39 @@ MAX_PAGES_PER_SITE: int = 6
 # Page navigation timeout (in seconds)
 PAGE_TIMEOUT_SECONDS: int = 45
 
+# If True, reuses existing project folders on startup instead of scraping from scratch every time
+SKIP_SCRAPING_IF_EXISTS: bool = True
+
+# Hotkey description for pausing/resuming reading
+PAUSE_HOTKEY_NAME: str = "F8 (or Ctrl+Alt+P)"
+
 
 # ==========================================
 # Scrolling and Human Movement Parameters
 # ==========================================
 
-# Interval between scroll events in seconds (3 to 4 seconds to mimic human reading speed)
+# Interval between scroll events in seconds (randomized 3, 4, or 5 seconds)
 SCROLL_INTERVAL_MIN: float = 3.0
-SCROLL_INTERVAL_MAX: float = 4.0
+SCROLL_INTERVAL_MAX: float = 5.0
+SCROLL_INTERVAL_CHOICES: List[float] = [3.0, 4.0, 5.0]
+
+# Interval between scroll-up inspections during code reading (after 7 to 9 scroll downs)
+SCROLL_UPS_TRIGGER_MIN: int = 7
+SCROLL_UPS_TRIGGER_MAX: int = 9
+
+# Number of scroll ups when triggered (1, 2, or 3 scroll ups)
+SCROLL_UP_COUNT_MIN: int = 1
+SCROLL_UP_COUNT_MAX: int = 3
 
 # Wheel scroll delta per interval.
 # Negative value scrolls down on Windows (-120 is one standard mouse wheel notch).
 # -100 to -160 gives a natural, steady scroll down of about 4-8 lines.
 SCROLL_DELTA_MIN: int = -160
 SCROLL_DELTA_MAX: int = -100
+
+# Scroll up delta (positive values scroll up on Windows)
+SCROLL_UP_DELTA_MIN: int = 100
+SCROLL_UP_DELTA_MAX: int = 150
 
 # Micro-steps per scroll action (subdivides wheel ticks for smoother visual scroll)
 SCROLL_MICRO_STEPS: int = 3
